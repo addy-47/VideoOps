@@ -10,7 +10,6 @@ import traceback
 from typing import List, Dict, Tuple, Any, Optional, Union
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-from dotenv import load_dotenv
 # MoviePy imports
 from moviepy import VideoFileClip, AudioFileClip, CompositeVideoClip, concatenate_videoclips
 from moviepy.video.fx import __all__ as vfx
@@ -66,8 +65,6 @@ except ImportError:
             
         return output_file
 
-# Load environment variables
-load_dotenv()
 TEMP_DIR = os.getenv("TEMP_DIR", tempfile.gettempdir())
 
 # Default crossfade duration
@@ -255,7 +252,7 @@ def render_clip_with_ffmpeg(
                 clip.close()
             if hasattr(clip, 'audio') and clip.audio:
                 clip.audio.close()
-        except:
+        except Exception:
             pass
 
 # ==================== MAIN RENDERING FUNCTION ====================

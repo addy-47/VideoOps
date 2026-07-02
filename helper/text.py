@@ -3,6 +3,7 @@ import concurrent.futures
 import os
 import time
 import logging
+from pathlib import Path
 from moviepy import *
 from moviepy.video.fx import FadeIn
 from moviepy.video.fx import FadeOut
@@ -18,7 +19,8 @@ try:
 except ImportError:
     HAS_DILL = False
 
-logging.basicConfig(level=logging.INFO)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_FONT = str(_PROJECT_ROOT / "packages" / "fonts" / "default_font.ttf")
 logger = logging.getLogger(__name__)
 
 # Define a standalone function for process_section that will work with multiprocessing
@@ -62,15 +64,15 @@ class TextHelper:
       # Font settings
       self.fonts_dir = os.path.join(os.path.dirname(__file__), 'fonts')
       os.makedirs(self.fonts_dir, exist_ok=True)
-      self.title_font_path = r"/home/addy/projects/youtube-shorts-automation/packages/fonts/default_font.ttf"
-      self.body_font_path = r"/home/addy/projects/youtube-shorts-automation/packages/fonts/default_font.ttf"
+      self.title_font_path = _DEFAULT_FONT
+      self.body_font_path = _DEFAULT_FONT
 
       # Define transitions with proper effects
       self.transitions = {
           "fade": lambda clip, duration: clip.with_effects([FadeIn(duration)]),
           "fade_out": lambda clip, duration: clip.with_effects([FadeOut(duration)]),
-          "slide": lambda clip, duration: clip.with_position(lambda t: (0, 0 + t * (self.resolution[1] / duration))),
-          "slide_out": lambda clip, duration: clip.with_position(lambda t: (0, self.resolution[1] - t * (self.resolution[1] / duration))),
+          "slide": lambda clip, duration: clip.with_position(lambda t: (0, min(self.resolution[1], 0 + t * (self.resolution[1] / duration)))),
+          "slide_out": lambda clip, duration: clip.with_position(lambda t: (0, max(0, self.resolution[1] - t * (self.resolution[1] / duration)))),
           "zoom": lambda clip, duration: clip.resized(lambda t: 1 + t * (0.5 / duration)),
           "zoom_out": lambda clip, duration: clip.resized(lambda t: 1 - t * (0.5 / duration)),
       }
@@ -264,7 +266,7 @@ class TextHelper:
       logger.info(f"Generating {len(script_sections)} text clips in parallel")
 
       if not max_workers:
-          max_workers = min(len(script_sections), os.cpu_count())
+          max_workers = max(1, min(len(script_sections), os.cpu_count() or 1))
 
       # Check if we have dill for advanced serialization
       if HAS_DILL:
@@ -491,26 +493,32 @@ class TextHelper:
               for i, clip in enumerate(clips):
                   # Apply appropriate effects based on position
                   if i > 0:  # Not the first clip
-                      clip = clip.with_effects((CrossFadeIn(transition_duration/2)))
+                      clip = clip.with_effects([CrossFadeIn(transition_duration/2)])
                   if i < len(clips) - 1:  # Not the last clip
-                      clip = clip.with_effects((CrossFadeOut(transition_duration/2)))
+                      clip = clip.with_effects([CrossFadeOut(transition_duration/2)])
                   concatenated_clips.append(clip)
               
               word_sequence = concatenate_videoclips(concatenated_clips, method="compose")
               logger.info(f"Successfully created word sequence with crossfades, duration: {word_sequence.duration:.2f}s")
           except Exception as e:
-              # Fallback Method: Use simple fade in/out effects
-              logger.warning(f"Crossfade failed: {e}. Using fallback fade method.")
-              concatenated_clips = []
-              for i, clip in enumerate(clips):
-                  if i > 0:  # Not the first clip
-                      clip = clip.with_effects([FadeIn(transition_duration/2)])
-                  if i < len(clips) - 1:  # Not the last clip
-                      clip = clip.with_effects([FadeOut(transition_duration/2)])
-                  concatenated_clips.append(clip)
-                  
-              word_sequence = concatenate_videoclips(concatenated_clips, method="compose")
-              logger.info(f"Created word sequence with fade effects, duration: {word_sequence.duration:.2f}s")
+               # Fallback Method: Use simple fade in/out effects
+               logger.warning(f"Crossfade failed: {e}. Using fallback fade method.")
+               try:
+                   concatenated_clips = []
+                   for i, clip in enumerate(clips):
+                       if i > 0:  # Not the first clip
+                           clip = clip.with_effects([FadeIn(transition_duration/2)])
+                       if i < len(clips) - 1:  # Not the last clip
+                           clip = clip.with_effects([FadeOut(transition_duration/2)])
+                       concatenated_clips.append(clip)
+
+                   word_sequence = concatenate_videoclips(concatenated_clips, method="compose")
+                   logger.info(f"Created word sequence with fade effects, duration: {word_sequence.duration:.2f}s")
+               except Exception as e2:
+                   # Ultimate fallback: concatenate without transitions
+                   logger.warning(f"Fade effects also failed: {e2}. Using raw concatenation without transitions.")
+                   word_sequence = concatenate_videoclips(clips, method="compose")
+                   logger.info(f"Created word sequence without transitions, duration: {word_sequence.duration:.2f}s")
 
       # Create a transparent background for the entire video
       bg = ColorClip(size=self.resolution, color=(0,0,0,0)).with_duration(word_sequence.duration)
@@ -577,7 +585,7 @@ class TextHelper:
       logger.info(f"Generating {len(script_sections)} word-by-word text clips in parallel")
 
       if not max_workers:
-          max_workers = min(len(script_sections), os.cpu_count())
+          max_workers = max(1, min(len(script_sections), os.cpu_count() or 1))
 
       # Store results with their section index to ensure correct ordering
       results_with_index = []

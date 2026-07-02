@@ -4,14 +4,15 @@ import os
 import requests
 import logging
 import concurrent.futures
+from pathlib import Path
 from moviepy  import VideoClip, concatenate_videoclips, ColorClip, CompositeVideoClip, ImageClip, TextClip
 from helper.blur import custom_blur, custom_edge_blur
 from helper.minor_helper import measure_time
 from helper.text import TextHelper
-from dotenv import load_dotenv
 from typing import Optional, List, Tuple, Dict, Any, Union
 
-load_dotenv()
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_FONT = str(_PROJECT_ROOT / "packages" / "fonts" / "default_font.ttf")
 
 # API keys and settings
 huggingface_api_key = os.getenv("HUGGINGFACE_API_KEY")
@@ -38,7 +39,6 @@ else:
     hf_headers = None
     logging.warning("No Hugging Face API key found. Will use fallback methods for image generation.")
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 resolution = (1080, 1920)  # Assuming a standard resolution for YouTube Shorts
@@ -100,7 +100,7 @@ def generate_images_parallel(prompts, style="photorealistic", max_workers=None):
 
     if not max_workers:
         # Use fewer workers for API calls to avoid rate limiting
-        max_workers = min(len(prompts), 4)
+        max_workers = max(1, min(len(prompts), 4))
 
     # Image generation is I/O bound (API calls), so use ThreadPoolExecutor
     image_paths = []
@@ -428,7 +428,7 @@ def create_image_clips_parallel(image_paths, durations, texts=None, with_zoom=Tr
         texts = [None] * len(image_paths)
 
     if not max_workers:
-        max_workers = min(len(image_paths), os.cpu_count())
+        max_workers = max(1, min(len(image_paths), os.cpu_count() or 1))
 
     # Image clip creation is CPU bound, but use ThreadPoolExecutor instead of ProcessPoolExecutor
     # to avoid serialization issues
@@ -490,7 +490,7 @@ def _create_still_image_clip(image_path, duration, text=None, text_position=('ce
       y_center = new_height // 2
       x1 = max(0, x_center - resolution[0] // 2)
       y1 = max(0, y_center - resolution[1] // 2)
-      image = image.crop(x1=x1, y1=y1, width=resolution[0], height=resolution[1])
+      image = image.cropped(x1=x1, y1=y1, width=resolution[0], height=resolution[1])
 
   # Add zoom effect if requested
   if with_zoom:
@@ -514,7 +514,7 @@ def _create_still_image_clip(image_path, duration, text=None, text_position=('ce
           text=text,
           font_size=font_size,
           color='white',
-          font=r"/home/addy/projects/youtube-shorts-automation/packages/fonts/default_font.ttf",
+          font=_DEFAULT_FONT,
           stroke_color='black',
           stroke_width=1,
           method='caption',
@@ -526,7 +526,7 @@ def _create_still_image_clip(image_path, duration, text=None, text_position=('ce
           text=text,
           font_size=font_size,
           color='black',
-          font=r"/home/addy/projects/youtube-shorts-automation/packages/fonts/default_font.ttf",
+          font=_DEFAULT_FONT,
           method='caption',
           size=(resolution[0] - 100, None)
       ).with_position((2, 2), relative=True).with_opacity(0.6).with_duration(duration)

@@ -6,12 +6,8 @@ from typing import List, Dict, Any, Optional
 from moviepy  import AudioFileClip, concatenate_audioclips
 from helper.minor_helper import measure_time
 from gtts import gTTS
-from dotenv import load_dotenv
-
 # Set up logging
 logger = logging.getLogger(__name__)
-
-load_dotenv()
 
 # Get temp directory from environment variable or use default
 TEMP_DIR = os.getenv("TEMP_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp"))
@@ -151,7 +147,7 @@ class AudioHelper:
 
             return self.create_tts_audio(text, filename, section_voice)
 
-        workers = max_workers or min(len(script_sections), os.cpu_count() * 2)
+        workers = max_workers or max(1, min(len(script_sections), (os.cpu_count() or 1) * 2))
         audio_files = []
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:

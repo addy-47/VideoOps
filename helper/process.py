@@ -1,4 +1,3 @@
-import nltk
 import time
 import random
 import logging
@@ -18,8 +17,6 @@ try:
 except ImportError:
     HAS_DILL = False
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @measure_time
@@ -162,7 +159,7 @@ def process_background_clips_parallel(video_info , blur_background=False, edge_b
 
     # Determine number of workers based on CPU cores
     if not max_workers:
-        max_workers = min(len(video_info ), os.cpu_count())
+        max_workers = max(1, min(len(video_info ), os.cpu_count() or 1))
 
     # Choose executor based on dill availability
     if HAS_DILL:

@@ -5,8 +5,8 @@ import logging
 import requests
 import tempfile
 import textwrap
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from dotenv import load_dotenv
 from datetime import datetime
 import numpy as np
 import shutil
@@ -17,24 +17,8 @@ from helper.minor_helper import measure_time, cleanup_temp_directories
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Timer function for performance monitoring
-def measure_time(func):
-    """Decorator to measure the execution time of functions"""
-    def wrapper(*args, **kwargs):
-        start_time = time.time()
-        start_datetime = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        logger.info(f"STARTING {func.__name__} at {start_datetime}")
-        result = func(*args, **kwargs)
-        end_time = time.time()
-        duration = end_time - start_time
-        logger.info(f"COMPLETED {func.__name__} in {duration:.2f} seconds")
-        return result
-    return wrapper
-
 # Get temp directory from environment variable or use default
 TEMP_DIR = os.getenv("TEMP_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp"))
-# Ensure temp directory exists
-os.makedirs(TEMP_DIR, exist_ok=True)
 
 class ThumbnailGenerator:
     def __init__(self, output_dir="output"):
@@ -44,9 +28,6 @@ class ThumbnailGenerator:
         Args:
             output_dir (str): Directory to save output thumbnails
         """
-        # Load environment variables
-        load_dotenv()
-
         # Setup directories
         self.output_dir = output_dir
         self.temp_dir = os.path.join(TEMP_DIR, f"thumbnail_{int(time.time())}")
@@ -55,7 +36,8 @@ class ThumbnailGenerator:
 
         # Font settings
         self.fonts_dir = os.path.join(os.path.dirname(__file__), 'fonts')
-        self.title_font_path = r"/home/addy/projects/youtube-shorts-automation/packages/fonts/default_font.ttf"
+        _project_root = Path(__file__).resolve().parent.parent
+        self.title_font_path = str(_project_root / "packages" / "fonts" / "default_font.ttf")
 
         # Setup API credentials
         self.huggingface_api_key = os.getenv("HUGGINGFACE_API_KEY")
@@ -416,7 +398,7 @@ class ThumbnailGenerator:
 
                 try:
                     font = ImageFont.truetype(self.title_font_path, 70)
-                except:
+                except Exception:
                     font = ImageFont.load_default()
 
                 wrapped_text = textwrap.fill(title, width=25)
@@ -460,32 +442,4 @@ class ThumbnailGenerator:
             cleanup_temp_directories(specific_dir=self.temp_dir)
 
 
-# Simple test function
-def test_thumbnail_generator():
-    generator = ThumbnailGenerator(output_dir="output/thumbnails")
-    title = "How AI is Revolutionizing Healthcare"
-    script_sections = [
-        {"text": "AI is transforming how doctors diagnose diseases with unprecedented accuracy.", "duration": 5},
-        {"text": "Machine learning algorithms can now detect patterns that human doctors might miss.", "duration": 5},
-        {"text": "This technology is already saving lives in hospitals around the world.", "duration": 5}
-    ]
 
-    thumbnail_path = generator.generate_thumbnail(
-        title=title,
-        script_sections=script_sections,
-        style="photorealistic"
-    )
-
-    print(f"Thumbnail generated at: {thumbnail_path}")
-    generator.cleanup()
-
-
-if __name__ == "__main__":
-    # Set up basic logging for stand-alone testing
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
-    )
-
-    # Run test
-    test_thumbnail_generator()

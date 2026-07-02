@@ -213,16 +213,27 @@ def _try_direct_crossfade(
     crossfade_duration: float,
     preset: str
 ) -> Tuple[bool, Optional[str]]:
-    """Try concatenation with direct crossfade method."""
+    """Try concatenation with crossfade transitions (MoviePy 2.x compatible)."""
     try:
         logger.info("Using direct crossfade method")
         # Use a smaller crossfade duration to avoid audio issues
         actual_crossfade = min(crossfade_duration, 0.5)
         
+        # In MoviePy 2.x, crossfades are done by applying effects to individual
+        # clips before concatenation with method="compose"
+        from moviepy.video.fx import CrossFadeIn, CrossFadeOut
+        
+        crossfade_clips = []
+        for i, clip in enumerate(clips):
+            if i > 0:
+                clip = clip.with_effects([CrossFadeIn(actual_crossfade)])
+            if i < len(clips) - 1:
+                clip = clip.with_effects([CrossFadeOut(actual_crossfade)])
+            crossfade_clips.append(clip)
+        
         final_clip = concatenate_videoclips(
-            clips,
-            method="crossfade",
-            crossfade_duration=actual_crossfade
+            crossfade_clips,
+            method="compose"
         )
         
         _write_final_clip(final_clip, output_file, preset)
@@ -237,11 +248,6 @@ def _try_direct_crossfade(
     
     except Exception as e:
         logger.error(f"Direct crossfade failed: {e}")
-        # Clean up any clips
-        try:
-            final_clip.close()
-        except:
-            pass
         return False, None
 
 def _try_manual_fades(
@@ -293,7 +299,7 @@ def _try_manual_fades(
             for clip in clips_with_fades:
                 clip.close()
             final_clip.close()
-        except:
+        except Exception:
             pass
         return False, None
 
@@ -321,7 +327,7 @@ def _try_simple_concatenation(
         logger.error(f"Simple concatenation failed: {e}")
         try:
             final_clip.close()
-        except:
+        except Exception:
             pass
         return False, None
 
@@ -386,5 +392,5 @@ def _close_all_clips(clips: List[Any]) -> None:
     for clip in clips:
         try:
             clip.close()
-        except:
+        except Exception:
             pass 

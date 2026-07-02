@@ -4,13 +4,10 @@ import googleapiclient.errors # for handling API errors
 from automation.youtube_auth import authenticate_youtube
 import logging
 from google.auth.transport.requests import Request
-from dotenv import load_dotenv
 import io
 
 # Configure logging - don't use basicConfig since main.py handles this
 logger = logging.getLogger(__name__)
-
-load_dotenv()
 
 def get_authenticated_service():
     """Load YouTube API credentials."""

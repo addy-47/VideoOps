@@ -1,12 +1,8 @@
 import os
 import pickle
-from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
-
-# Load environment variables
-load_dotenv()
 
 # Set up paths for credential files
 CREDENTIALS_DIR = os.path.join(os.path.dirname(__file__), "credentials")

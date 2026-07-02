@@ -5,6 +5,10 @@ import logging.handlers # Import handlers
 from pathlib import Path # for file paths and directory creation
 from dotenv import load_dotenv # for loading environment variables
 import datetime # for timestamp
+
+# Load .env BEFORE importing project modules so env vars are available at import time
+load_dotenv()
+
 from automation.content_generator import generate_batch_video_queries, generate_batch_image_prompts, generate_comprehensive_content
 from automation.shorts_maker_V import YTShortsCreator_V
 from automation.shorts_maker_I import YTShortsCreator_I
@@ -13,9 +17,9 @@ from automation.thumbnail import ThumbnailGenerator
 from helper.news import get_latest_news
 from helper.minor_helper import ensure_output_directory, parse_script_to_cards, cleanup_temp_directories
 
-load_dotenv()
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 YOUTUBE_TOPIC = os.getenv("YOUTUBE_TOPIC", "Artificial Intelligence")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 # Configure logging with daily rotation
 LOG_DIR = 'logs'  # Define log directory
@@ -100,7 +104,7 @@ def generate_youtube_short(topic, style="photorealistic", max_duration=25, creat
         logger.info(f"Generating comprehensive content for : {topic}")
 
         # Generate all content in a single API call
-        content_package = generate_comprehensive_content(topic, max_tokens=800)
+        content_package = generate_comprehensive_content(topic, max_tokens=1600)
 
         # Extract content elements
         script = content_package["script"]
@@ -149,10 +153,10 @@ def generate_youtube_short(topic, style="photorealistic", max_duration=25, creat
         # We still need to generate section-specific queries for each section
         if isinstance(creator_type, YTShortsCreator_V):
             logger.info("Generating video search queries for each section using AI...")
-            batch_query_results = generate_batch_video_queries(card_texts, overall_topic=topic, model="gpt-4o-mini-2024-07-18")
+            batch_query_results = generate_batch_video_queries(card_texts, overall_topic=topic, model=GEMINI_MODEL)
         else:
             logger.info("Generating image search prompts for each section using AI...")
-            batch_query_results = generate_batch_image_prompts(card_texts, overall_topic=topic, model="gpt-4o-mini-2024-07-18")
+            batch_query_results = generate_batch_image_prompts(card_texts, overall_topic=topic, model=GEMINI_MODEL)
 
         # Extract queries in order, using a fallback if needed
         default_query = f"abstract {topic}"

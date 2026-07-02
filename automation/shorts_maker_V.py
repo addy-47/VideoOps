@@ -1,7 +1,6 @@
 import os # for file operations
 import time # for timing events and creating filenames like timestamps
 import random # for randomizing elements
-import textwrap # for wrapping text into lines but most cases being handled by textclip class in moviepy
 import requests # for making HTTP requests
 import numpy as np # for numerical operations here used for rounding off
 import logging # for logging events
@@ -11,15 +10,11 @@ from moviepy  import ( # for video editing
     AudioFileClip, concatenate_videoclips, ColorClip, CompositeAudioClip, concatenate_audioclips
 )
 from moviepy.video.fx import *
-# from moviepy.config import change_settings
-# change_settings({"IMAGEMAGICK_BINARY": "magick"}) # for windows users
 from gtts import gTTS
-from dotenv import load_dotenv
 import shutil # for file operations like moving and deleting files
 import tempfile # for creating temporary files
 from datetime import datetime # for more detailed time tracking
 import concurrent.futures
-from functools import wraps
 import traceback  # Import traceback at the module level
 from helper.minor_helper import measure_time, cleanup_temp_directories
 from helper.fetch import fetch_videos_parallel
@@ -29,13 +24,10 @@ from helper.process import process_background_clips_parallel
 from helper.audio import AudioHelper
 from automation.parallel_tasks import ParallelTaskExecutor
 from automation.renderer import render_video
-import multiprocessing
 
 # Configure logging for easier debugging
 # Do NOT initialize basicConfig here - this will be handled by main.py
 logger = logging.getLogger(__name__)
-
-load_dotenv()  # Load environment variables from .env file
 
 # Get temp directory from environment variable or use default
 TEMP_DIR = os.getenv("TEMP_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp"))
@@ -358,7 +350,7 @@ class YTShortsCreator_V:
                             silent_audio = AudioFileClip.__new__(AudioFileClip)
                             silent_audio.duration = section_duration
                             composite = composite.with_audio(silent_audio)
-                        except:
+                        except Exception:
                             logger.error(f"Could not create silent audio for section {i}")
                 else:
                     # No audio provided, create silent audio

@@ -1,9 +1,6 @@
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 from helper.minor_helper import measure_time
-from dotenv import load_dotenv
-
-load_dotenv()
 
 @measure_time
 def custom_blur(clip, radius=5):

@@ -1,23 +1,13 @@
 import re
 import logging
-from collections import Counter
 from pathlib import Path
-import nltk
-from nltk.corpus import stopwords
-import re
 import time
 import os
 import shutil
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 # Get temp directory from environment variable or use default
 TEMP_DIR = os.getenv("TEMP_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp"))
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Timer function for performance monitoring
@@ -185,24 +175,5 @@ def parse_script_to_cards(script):
     logger.info(f"Created {len(cards)} script cards")
     return cards
 
-def get_keywords(script, max_keywords=3):
-    """Extract keywords from text using NLTK (Now potentially unused)."""
-    # Ensure NLTK resources are downloaded
-    nltk.download('stopwords', quiet=True) #quiet=True to suppress output
-    nltk.download('punkt', quiet=True)
-
-    stop_words = set(stopwords.words('english'))
-
-    # Extract words from script, ignoring stopwords
-    words = re.findall(r'\b\w+\b', script.lower())
-    filtered_words = [word for word in words if word not in stop_words and len(word) > 3]
-
-    # Count word frequency
-    word_counts = Counter(filtered_words)
-
-    # Get the most common words
-    top_keywords = [word for word, count in word_counts.most_common(max_keywords)]
-
-    return top_keywords
 
 

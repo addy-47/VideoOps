@@ -1,9 +1,5 @@
-import os # for interacting with the operating system
 import logging # for logging messages
-import re # for regular expressions
 import time # for handling retries
-import concurrent.futures # for parallel processing
-from helper.audio import AudioHelper
 from helper.minor_helper import measure_time
 
 logger = logging.getLogger(__name__)
@@ -250,6 +246,8 @@ class GoogleVoiceover:
         Returns:
             list: Audio file information with durations
         """
+        # Local import to avoid circular dependency (helper.audio ↔ automation.voiceover)
+        from helper.audio import AudioHelper
         # Use AudioHelper to process all sections in parallel
         audio_helper = AudioHelper(self.output_dir)
         return audio_helper.process_audio_for_script(
@@ -274,6 +272,8 @@ def generate_voiceovers_parallel(script_sections, voice_style=None, max_workers=
     logger.info(f"Generating voiceovers for {len(script_sections)} sections in parallel")
     start_time = time.time()
 
+    # Local import to avoid circular dependency (helper.audio ↔ automation.voiceover)
+    from helper.audio import AudioHelper
     # Create AudioHelper instance
     audio_helper = AudioHelper(temp_dir)
 

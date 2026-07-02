@@ -3,10 +3,10 @@
 import os # for file operations
 import time # for timing events and creating filenames like timestamps
 import random # for randomizing elements
-import textwrap # for wrapping text into lines but most cases being handled by textclip class in moviepy
 import requests # for making HTTP requests
 import numpy as np # for numerical operations here used for rounding off
 import logging # for logging events
+from pathlib import Path
 from PIL import Image, ImageFilter, ImageDraw, ImageFont# for image processing
 from moviepy  import ( # for video editing
     VideoFileClip, VideoClip, TextClip, CompositeVideoClip,ImageClip,
@@ -14,12 +14,10 @@ from moviepy  import ( # for video editing
 )
 from moviepy.video.fx import *
 from gtts import gTTS
-from dotenv import load_dotenv
 import shutil # for file operations like moving and deleting files
 import tempfile # for creating temporary files
 from datetime import datetime # for more detailed time tracking
 import concurrent.futures
-from functools import wraps
 import traceback  # Import traceback at the module level
 from helper.minor_helper import measure_time, cleanup_temp_directories
 from helper.image import generate_images_parallel, create_image_clips_parallel
@@ -28,7 +26,6 @@ from helper.text import TextHelper
 from helper.audio import AudioHelper
 from automation.shorts_maker_V import YTShortsCreator_V
 from automation.renderer import render_video
-import multiprocessing
 
 # from moviepy.config import change_settings
 # change_settings({"IMAGEMAGICK_BINARY": "magick"}) # for windows users
@@ -36,8 +33,6 @@ import multiprocessing
 # Configure logging for easier debugging
 # Do NOT initialize basicConfig here - this will be handled by main.py
 logger = logging.getLogger(__name__)
-
-load_dotenv()  # Load environment variables from .env file
 
 # Get temp directory from environment variable or use default
 TEMP_DIR = os.getenv("TEMP_DIR", os.path.join(os.path.dirname(os.path.dirname(__file__)), "temp"))
@@ -70,8 +65,10 @@ class YTShortsCreator_I:
         # Font settings
         self.fonts_dir = os.path.join(os.path.dirname(__file__), 'fonts')
         os.makedirs(self.fonts_dir, exist_ok=True)
-        self.title_font_path = r"/home/addy/projects/youtube-shorts-automation/packages/fonts/default_font.ttf"
-        self.body_font_path = r"/home/addy/projects/youtube-shorts-automation/packages/fonts/default_font.ttf"
+        _project_root = Path(__file__).resolve().parent.parent
+        _default_font = str(_project_root / "packages" / "fonts" / "default_font.ttf")
+        self.title_font_path = _default_font
+        self.body_font_path = _default_font
 
         # Initialize TTS (Text-to-Speech)
         self.azure_tts = None
@@ -512,7 +509,7 @@ class YTShortsCreator_I:
                             silent_audio = AudioFileClip.__new__(AudioFileClip)
                             silent_audio.duration = section_duration
                             composite = composite.with_audio(silent_audio)
-                        except:
+                        except Exception:
                             logger.error(f"Could not create silent audio for section {i}")
                 else:
                     # No audio provided, create silent audio

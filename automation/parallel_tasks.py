@@ -38,7 +38,7 @@ class ParallelTaskExecutor:
             max_workers (int): Maximum number of concurrent workers
         """
         self.tasks = {}
-        self.max_workers = max_workers or min(32, os.cpu_count() * 2)
+        self.max_workers = max_workers or max(1, min(32, (os.cpu_count() or 1) * 2))
         self.results = {}
 
     def add_task(self, name: str, func: Callable, args: tuple = (), kwargs: dict = None,
@@ -181,7 +181,7 @@ def process_in_parallel(items, process_func, max_workers=None, executor_cls=conc
     if not items:
         return []
 
-    workers = max_workers or min(len(items), os.cpu_count() * 2)
+    workers = max_workers or max(1, min(len(items), (os.cpu_count() or 1) * 2))
     results = []
 
     with executor_cls(max_workers=workers) as executor:
@@ -212,7 +212,7 @@ def process_items_with_index(items, process_func, max_workers=None,
     if not items:
         return []
 
-    workers = max_workers or min(len(items), os.cpu_count() * 2)
+    workers = max_workers or max(1, min(len(items), (os.cpu_count() or 1) * 2))
     results = [None] * len(items)
 
     def process_with_index(idx, item):
