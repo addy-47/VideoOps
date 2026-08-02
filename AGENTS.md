@@ -1,126 +1,93 @@
-# yt-aotomation — Agent Guide
+# AGENTS.md — videoops
 
-## What this is
+## Rules Gate — READ THESE FIRST
 
-AI-powered YouTube Shorts automation. Generates scripts (Gemini `gemini-2.5-flash-lite` via `google-genai` SDK), assembles video/image clips (MoviePy 2.1.2), adds TTS voiceover (Google Cloud → Azure → gTTS fallback), and optionally uploads to YouTube.
+`.agents/rules/` defines role-specific mandates that override defaults. Read the relevant rule file BEFORE starting any task and follow it verbatim:
 
-Pure Python 3 project. No monorepo tooling, no build step, no Docker, no CI.
+| Task type | Rule file to load |
+|-----------|--------------------|
+| Any Python/backend code | `.agents/rules/py-backend-engieer.md` |
+| Any LLM/prompt/agent work | `.agents/rules/senior-ai-engineer.md` |
+| Any output validation / pipeline sign-off | `.agents/rules/visual-qa-engineer.md` |
 
-## Architecture
+For every change or run, the visual-qa gate applies: **assume every output is broken until frames are verified**.
+
+---
+
+## What This Repo Is
+
+AI YouTube Shorts pipeline (`v0.2.0`). LLM writes the script → media assets fetched/synthesized → MoviePy+FFmpeg assembles a 1080×1920 vertical short → optional YouTube upload. Code that runs is only half the job; the **rendered video is the product**. If the frames are bad, the code is wrong, no matter how clean it looks.
+
+## Layout
 
 ```
-main.py                        ← entrypoint
-├── automation/                ← core pipeline (content gen, creators, upload, auth)
-└── helper/                    ← utilities (text, audio, fetch, image, blur, crossfade, etc.)
-```
-
-- `main.py`: orchestrates the full pipeline. Calls `get_creator_for_day()` which alternates between **image-based** (`YTShortsCreator_I`, even days) and **video-based** (`YTShortsCreator_V`, odd days).
-- `automation/`: content generation (Gemini), Shorts creators (video/image), YouTube upload/auth, thumbnail gen, parallel rendering.
-- `helper/`: text/animation clips, TTS with fallback chain, stock video/image fetching, crossfade concatenation, blur effects, system resource monitoring, news fetching.
-
-Design pattern everywhere: **fallback chains** — if the primary method fails, the code tries alternatives before giving up (TTS: Google → Azure → gTTS; images: HF model → fallback HF → Unsplash → Pexels; rendering: parallel → sequential → emergency copy).
-
-## Setup
-
-```sh
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-**API keys** (in `.env` — already present on this machine, **never commit**):
-`GEMINI_API_KEY`, `GOOGLE_APPLICATION_CREDENTIALS` (points to `lazycreator-1.json`), `PEXELS_API_KEY`, `PIXABAY_API_KEY`, `NEWS_API_KEY`, `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION`, `HF_API_TOKEN`, `ENABLE_YOUTUBE_UPLOAD`.
+main.py                    # CLI entrypoint
+src/videoops/
+├── domain/        # Pure dataclasses/enums — ZERO external deps (hard rule)
+├── story/         # LLM script generation (OpenAI-compatible client) + news fetch
+├── assets/        # TTS fallback chain + stock/AI visual fetching
+├── media/         # MoviePy/FFmpeg compositing, text overlays, frame extraction
+├── publishing/    # YouTube OAuth upload
+└── pipeline/      # ShortsPipelineOrchestrator — wires everything
+docs/              # ALL specs & documentation live here
+sandbox/           # ALL runtime output: outputs/ (final video) + temp/ (scratch) 
+archive/           # holds the legacy `automation/` + `helper/`
 
 ## Commands
 
-| Action | Command |
-|--------|---------|
-| Run (auto-select creator by day parity) | `python main.py` or `.venv/bin/python main.py` |
-| Force video-based creator | `python main.py video` |
-| Force image-based creator | `python main.py image` |
-| Cron execution | `./run.sh` (uses `SCRIPT_DIR` instead of hardcoded path) |
-| Debug mode | `DEBUG_MODE=true python main.py` |
-| Enable upload | `ENABLE_YOUTUBE_UPLOAD=true python main.py` |
-| Verify API keys | `python _verify_keys.py` |
+```sh
+python main.py              # auto (video/image alternates by day-of-year)
+python main.py video         # force video pipeline
+python main.py image         # force image pipeline
+```
 
-Output goes to `ai_shorts_output/` with daily rotated logs in `logs/`.
+## Operational Pitfalls — Before touching anything
 
-## Pass 1 cleanup — what was done
+- **Check for running work first.** Do NOT start a pipeline run if one is already in flight. Duplicate runs burn live API quota (TTS + LLM + stock APIs) and contend for the server. Confirm with a process check before any execution.
+- **Never terminate a running process.** `server.txt` records a hard rule: if the GPU server is busy, STOP and report the blocker. Never kill a running job to make room.
+- **Never run the long pipeline twice to "see".** One run = real spend + server time. Verify inputs once, run once.
+- **Sandbox discipline.** Everything generated writes under `sandbox/` (`outputs/` and `temp/`). It is gitignored — never commit sandbox contents.
+- **Never write output outside `sandbox/` and never commit** `.env` (live API keys) or `server.txt` (credentials). Both are gitignored; keep it that way.
 
-- **`_init_.py` → `__init__.py`**: Both packages now have proper `__init__.py` files.
-- **`schedule.py`**: Removed (entirely commented-out dead code).
-- **Hardcoded font paths**: All 7 references now use `Path(__file__).resolve().parent.parent / "packages/fonts/default_font.ttf"` — no more absolute paths tied to the old repo location.
-- **`.env`**: `GOOGLE_APPLICATION_CREDENTIALS` updated to current repo path.
-- **`run.sh`**: Uses `SCRIPT_DIR` instead of hardcoded old path.
-- **Circular import fixed**: `helper/audio.py` ↔ `automation/voiceover.py` — broken by moving the import inside the methods that need it.
-- **Bare `except:`**: All 9 occurrences replaced with `except Exception:`.
-- **`logging.basicConfig()`**: Removed from 5 files that set it at module level (main.py owns logging setup).
-- **`load_dotenv()`**: Removed from 14 files (now called once in `main.py` before project imports).
-- **Dead code removed**: `fetch_image_unsplash` (defunct method using `self` outside a class), `get_keywords()` (unused NLTK function), test blocks in `content_generator.py` and `thumbnail.py`, unused imports (`textwrap`, `wraps`, `multiprocessing`, `nltk`, `dotenv` in various files).
-- **`requirements.txt`**: Stripped from 78 → 16 packages. Removed `opencv-python`, `PyAudio`, `pydub`, `scipy`, `sentry-sdk`, `Flask` (and 10+ other unused transitive deps), `logging==0.4.9.6` (name collision with stdlib), `ffmpeg-python`, `httpx`, `regex`, `future`. Removed dev tools (`black`, `flake8`, `isort`, `pytest`) — no pyproject.toml yet. Added missing `psutil` and `google-cloud-secret-manager`.
-- **API key verification**: `_verify_keys.py` checks all keys. See current status below.
+## Quality Mandate
 
-## Pass 2 — OpenAI → Gemini migration + MoviePy 2.x bug fixes + pipeline completion
+- **Quality is the first priority — no ceiling.** Every pipeline change is judged by the final rendered video, not by the code alone. If the output is merely "produced", it is not done.
+- **Critique the frames brutally.** After any run, inspect sampled frames (the orchestrator extracts QA frames under `sandbox/temp/frame_samples_*/`) and the audio. Check: caption/text renders correctly, no overlap, transitions intentional, narration matches visuals, no black frames, pacing natural.
+- **Do not approve** an output you only *assume* looks right. Apply the `visual-qa-engineer` rules before calling anything done.
 
-### What was done
-- **OpenAI → Gemini**: Removed `openai` SDK entirely. Replaced with `google-genai` SDK (v2.8.0). All 3 content generation functions now use `from google import genai` with `client.models.generate_content()`.
-- **JSON structured output**: Uses `response_mime_type='application/json'` for JSON responses from Gemini.
-- **Model config**: Model defaults to `gemini-2.5-flash-lite`, configurable via `GEMINI_MODEL` env var.
-- **`.env`**: `OPENAI_API_KEY` removed, `GEMINI_API_KEY` added.
-- **`_verify_keys.py`**: Now tests Gemini API with live call (temporary).
-- **Dead files deleted**: `automation/_init_.py`, `helper/_init_.py`, `automation/schedule.py`.
+## Config & Env
 
-### MoviePy 2.x compatibility fixes (10 files modified)
-| Bug | File | Fix |
-|-----|------|-----|
-| `'ImageClip' object has no attribute 'crop'` | `helper/image.py:493` | `.crop()` → `.cropped()` |
-| `max_workers must be greater than 0` | 10 spots across `fetch.py`, `text.py`, `process.py`, `image.py`, `audio.py`, `parallel_tasks.py` | `max(1, os.cpu_count() or 1)` guard |
-| `y1 must be >= y0` text geometry | `helper/text.py:74-75` | Clamped slide/slide_out positions |
-| `with_effects()` tuple → list | `helper/text.py:496,498` | `(CrossFadeIn(...))` → `[CrossFadeIn(...)]` |
-| `IndentationError` (pre-existing) | `helper/text.py:503` | Fixed 11-space → 10-space indent |
-| Word-by-word crossfade failure | `helper/text.py:517-521` | Added 2nd fallback (raw concat) |
-| Hardcoded `worker_count = 3` | `helper/memory.py:112` | Removed override |
-| Crossfade in MoviePy 2.x | `helper/crossfade.py:221-247` | Removed old `crossfade_duration` kwarg; uses per-clip `CrossFadeIn`/`CrossFadeOut` + `method="compose"` |
-| `load_dotenv` undefined | `automation/thumbnail.py:32` | Removed redundant call |
-| MoviePy version upgrade | `requirements.txt` | `moviepy>=2.1.2` → `moviepy>=2.2.1` |
+- `Settings` is a **module-level singleton** at `src/videoops/config.py:72` — not injectable; tests must monkeypatch. Imported by every layer.
+- `.env` is loaded by `pydantic-settings`; the `load_dotenv()` in `main.py` is redundant (leave it out of new code).
+- No `.env.example` exists — add one if you need to document env vars.
+- `LLM_BASE_URL`/`LLM_MODEL` default to NVIDIA-compatible OpenAI endpoint (`meta/llama-3.1-8b-instruct`).
 
-### Pipeline verification (both creators produce valid output)
-| Pipeline | Duration | Size | Thumbnail |
-|----------|----------|------|-----------|
-| Image-based (even days) | 29.53s, 1080×1920, ~30fps, 39MB | ✅ |
-| Video-based (odd days) | 22.96s, 1080×1920, 30fps, 24MB | ✅ (471K) |
+## Architecture Constraints
 
-Multiple Gemini content generation functions work reliably with `gemini-2.5-flash-lite`. Image fallback chain (HF → Unsplash → Pexels) works. Crossfading in MoviePy 2.2.1 is functional. YouTube upload blocked by port 8080 conflict (only matters with `ENABLE_YOUTUBE_UPLOAD=true`).
+- 5-layer monolith; dependencies flow downwards, away from the orchestrator.
+- `domain/` must stay dependency-free (stdlib only). Do not import pydantic, moviepy, requests, etc. there.
+- No DI — services are constructed inline. This is a known limitation; keep it consistent unless explicitly asked to change it.
+- Desktop/ffmpeg: FFmpeg must be on PATH (moviepy requirement). Python 3.11+.
 
-## Next steps (unresolved)
+---
 
-- **Remove `_verify_keys.py`** — temporary verification script, no longer needed for production.
-- **Pass 3: Code deduplication** — `shorts_maker_I.py` and `shorts_maker_V.py` share ~70% identical code (rendering pipeline, crossfading, audio/timing logic). Extract shared base class or utility module.
-- **Pass 4: Directory restructuring** — move project into `src/` layout for cleaner packaging.
-- **YouTube upload** — port 8080 conflict needs resolution if upload is desired.
-- **`pyproject.toml`** — add proper project metadata, dev tool configs (ruff, pytest).
+## Current Status (v0.2.1 Refactor - Completed Work)
 
-## Current API key status (as of Pass 2)
+- **Offline Supertonic-3 ONNX TTS Integration**:
+  - Uninstalled legacy cloud speech packages (`azure-cognitiveservices-speech`, `google-cloud-texttospeech`, `gTTS`).
+  - Integrated offline thread-safe `SupertonicTTSProvider` in [src/videoops/assets/audio.py](file:///home/addy/projects/apps/videoops/src/videoops/assets/audio.py) using Supertonic-3 ONNX models.
+- **Glassmorphism Pill Subtitle Overlay Engine**:
+  - Redesigned frosted dark glass pill capsule badge (`rgba(0, 0, 0, 180)`), rounded capsule ends, crisp 1px border (`outline=(255, 255, 255, 120)`), centered dead in the middle of the 1080×1920 canvas (`y = 960`).
+  - Built single-pass word rendering using Pillow's official `draw.textlength` with exact prefix text length centering for sub-pixel accuracy and zero text doubling/smearing.
+  - Active word highlighted in bright gold yellow (`#FFEB14`) with high-contrast white base text (`#FFFFFF`).
+  - Punctuation stripping handles leading/trailing hyphens while preserving internal contraction apostrophes (e.g. `"Switch 2's"`).
+- **Google Fonts & Typography System**:
+  - Replaced broken 14-byte stub fonts with genuine Google Fonts TTF binaries in [src/videoops/assets/fonts/](file:///home/addy/projects/apps/videoops/src/videoops/assets/fonts/): `Montserrat-ExtraBold.ttf` (318 KB) and `Outfit-Bold.ttf` (318 KB).
+- **MoviePy 2.2 Background Motion Fix**:
+  - Fixed background clip transformation ordering in [src/videoops/media/compositor.py](file:///home/addy/projects/apps/videoops/src/videoops/media/compositor.py) by moving `all_child_clips.append(v_clip)` *after* applying 1.35x Ken Burns slow-zoom motion (`v_clip.resized(lambda t: 1.0 + 0.35 * (t / duration))`).
+- **Stock Video Query Specificity**:
+  - Updated [src/videoops/assets/visual.py](file:///home/addy/projects/apps/videoops/src/videoops/assets/visual.py) query sanitization to query `"nintendo switch"` for Nintendo topics, eliminating generic/irrelevant stock video matches.
+- **Visual QA Signoff**:
+  - Verified by Visual QA Engineer subagent (`visual-qa-inspector`) with a **10/10 rating** and **PASSED verdict**.
 
-| Key | Status |
-|-----|--------|
-| `GEMINI_API_KEY` | ✅ Present, user-provided |
-| `GOOGLE_APPLICATION_CREDENTIALS` | ✅ File found, path updated |
-| `PEXELS_API_KEY` | ✅ Working |
-| `PIXABAY_API_KEY` | ✅ Working |
-| `NEWS_API_KEY` | ✅ Working |
-| `HUGGINGFACE_API_KEY` | ✅ Present |
-| `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION` | ⚠️ Not set (optional, gTTS fallback) |
 
-## Model references
-
-Gemini model defaults to `gemini-2.5-flash-lite`, configurable via `GEMINI_MODEL` env var.
-Used in `main.py` (2 locations) and `automation/content_generator.py` (3 function defaults).
-
-## Operational quirks
-
-- **Imports and `.env`**: `main.py` calls `load_dotenv()` BEFORE importing project modules, so env vars are available at module-load time.
-- **`run.sh` auto-commits** — before every cron run, it does `git add . && git commit --allow-empty`. The repo assumes this is the primary execution path.
-- **Day parity** — creator type alternates on even/odd day-of-year. Override with `main.py video` or `main.py image` for testing.
-- **70% code duplication** between `shorts_maker_I.py` and `shorts_maker_V.py` — not addressed yet.
-- **`requirements.txt`**: CRLF line endings fixed to Unix.

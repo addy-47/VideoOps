@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "videoops"
+version = "0.2.0"
+description = "AI-powered YouTube Shorts automation pipeline with Supertonic ONNX TTS Engine"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "moviepy>=2.2.1",
+    "Pillow>=10.4.0",
+    "numpy>=2.2.3",
+    "requests>=2.32.4",
+    "python-dotenv>=1.0.1",
+    "google-api-python-client>=2.160.0",
+    "google-auth>=2.38.0",
+    "google-auth-oauthlib>=1.2.1",
+    "onnxruntime>=1.18.0",
+    "soundfile>=0.12.1",
+    "scipy>=1.11.0",
+    "tqdm>=4.67.1",
+    "psutil>=5.9.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.3.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

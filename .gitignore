@@ -12,10 +12,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Output directories
+# Output & Sandbox directories
 ai_shorts_output/
 logs/
 temp/
+sandbox/
 
 # Large binary files
 ffmpeg/
@@ -25,3 +26,8 @@ ffmpeg/
 
 lazycreator-1.json
 cron.log
+*.mp4
+server.txt
+archive/
+sandbox/
+src/videoops.egg-info

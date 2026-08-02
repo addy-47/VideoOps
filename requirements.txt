@@ -1,5 +1,7 @@
+openai>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
 moviepy>=2.2.1
-google-genai>=2.8.0
 Pillow>=10.4.0
 numpy>=2.2.3
 requests>=2.32.4
@@ -9,8 +11,5 @@ google-cloud-texttospeech>=2.24.0
 google-api-python-client>=2.160.0
 google-auth>=2.38.0
 google-auth-oauthlib>=1.2.1
-google-cloud-secret-manager>=2.16.0
-azure-cognitiveservices-speech>=1.42.0
 tqdm>=4.67.1
-dill>=0.3.8
 psutil>=5.9.0
