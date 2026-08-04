@@ -1,32 +1,39 @@
-"""Pillow-based glassmorphism translucent pill badge caption overlay builder (1-3 words centered)."""
+"""Pillow-based pill badge caption overlay builder (1-3 words centered)."""
 
 import textwrap
 from pathlib import Path
 from PIL import Image, ImageDraw
 from videoops.media.font_utils import FontManager
 
+# Explicit Code Constants
+DEFAULT_FONT_SIZE = 54
+DEFAULT_FONT_NAME = "Poppins-Black.ttf"
+DEFAULT_TEXT_COLOR = (255, 255, 255)
+PILL_FILL_COLOR = (10, 12, 22, 210)
+PILL_BORDER_COLOR = (255, 255, 255, 140)
+TEXT_ACTIVE_COLOR = (255, 235, 20)
+TEXT_NORMAL_COLOR = (255, 255, 255)
+TEXT_STROKE_COLOR = (0, 0, 0)
+TEXT_STROKE_WIDTH = 3
+WORDS_PER_CHUNK = 3
+
 
 class TextOverlayBuilder:
-    """Builds sleek 1-3 word translucent glassmorphism pill capsule overlays centered dead in the middle."""
+    """Builds sleek 1-3 word pill capsule overlays centered in the middle."""
 
     @staticmethod
     def create_text_image(
         text: str,
         output_path: Path,
         size: tuple[int, int] = (1080, 1920),
-        font_size: int = 54,
-        font_name: str = "Poppins-Black.ttf",
-        text_color: tuple[int, int, int] = (255, 255, 255),
-        pill_color: tuple[int, int, int, int] = (0, 0, 0, 160),  # Translucent frosted dark pill
-        accent_color: tuple[int, int, int, int] = (255, 255, 255, 60),  # Subtle translucent glass stroke
+        font_size: int = DEFAULT_FONT_SIZE,
+        font_name: str = DEFAULT_FONT_NAME,
+        text_color: tuple[int, int, int] = DEFAULT_TEXT_COLOR,
         active_word_idx: int | None = None,
     ) -> Path:
-        """Create sleek glassmorphism translucent pill badge centered dead in the middle (y = 960)."""
+        """Create sleek translucent pill badge centered in the middle (y = 960)."""
         img = Image.new("RGBA", size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
-
-        # Load bold custom TTF font
-        font = FontManager.get_font(font_size=font_size, font_name=font_name)
 
         words = text.split()
         if not words:
@@ -34,7 +41,7 @@ class TextOverlayBuilder:
             return output_path
 
         # Clean trailing and leading punctuation/hyphens while preserving internal contraction apostrophes
-        raw_words = words[:3] if words else []
+        raw_words = words[:WORDS_PER_CHUNK] if words else []
         display_words = [w.strip(":,!?.-—\"'()") for w in raw_words]
         display_words = [w for w in display_words if w]
 
@@ -49,7 +56,7 @@ class TextOverlayBuilder:
         elif char_count > 16:
             font_sz = 48
         else:
-            font_sz = 56
+            font_sz = font_size
 
         font = FontManager.get_font(font_size=font_sz, font_name=font_name)
 
@@ -61,7 +68,7 @@ class TextOverlayBuilder:
         text_bbox = draw.textbbox((0, 0), display_text, font=font)
         text_h = text_bbox[3] - text_bbox[1]
 
-        # Dynamic tight-fitting pill capsule (fits exact text width + 70px symmetric padding)
+        # Dynamic tight-fitting pill capsule
         card_h = max(90, text_h + 36)
         card_w = min(1000, max(240, int(full_text_w) + 70))
 
@@ -70,19 +77,18 @@ class TextOverlayBuilder:
         right = left + card_w
         bottom = top + card_h
 
-        # Capsule radius = half height for perfect rounded end-caps
         pill_radius = card_h // 2
 
-        # Sleek dark glass capsule with subtle white border
+        # Draw pill capsule
         draw.rounded_rectangle(
             [(left, top), (right, bottom)],
             radius=pill_radius,
-            fill=(10, 12, 22, 210),
-            outline=(255, 255, 255, 140),
+            fill=PILL_FILL_COLOR,
+            outline=PILL_BORDER_COLOR,
             width=2,
         )
 
-        # Centered bold typography rendering with 3px black outline stroke
+        # Centered bold typography rendering with stroke
         start_x = center_x - (full_text_w / 2)
         active_idx = active_word_idx % len(display_words) if (active_word_idx is not None and len(display_words) > 0) else -1
 
@@ -91,9 +97,25 @@ class TextOverlayBuilder:
             word_x = start_x + (draw.textlength(prefix, font=font) if prefix else 0)
 
             if w_i == active_idx:
-                draw.text((word_x, center_y), word, fill=(255, 235, 20), font=font, anchor="lm", stroke_width=3, stroke_fill=(0, 0, 0))
+                draw.text(
+                    (word_x, center_y),
+                    word,
+                    fill=TEXT_ACTIVE_COLOR,
+                    font=font,
+                    anchor="lm",
+                    stroke_width=TEXT_STROKE_WIDTH,
+                    stroke_fill=TEXT_STROKE_COLOR,
+                )
             else:
-                draw.text((word_x, center_y), word, fill=(255, 255, 255), font=font, anchor="lm", stroke_width=3, stroke_fill=(0, 0, 0, 200))
+                draw.text(
+                    (word_x, center_y),
+                    word,
+                    fill=text_color,
+                    font=font,
+                    anchor="lm",
+                    stroke_width=TEXT_STROKE_WIDTH,
+                    stroke_fill=(0, 0, 0, 200),
+                )
 
         img.save(output_path, "PNG")
         return output_path

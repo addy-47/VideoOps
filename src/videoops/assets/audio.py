@@ -12,7 +12,9 @@ from videoops.domain.models import AssetType, MediaAsset
 logger = logging.getLogger(__name__)
 
 SUPERTONIC_MODEL_DIR = Path(__file__).resolve().parent.parent.parent.parent / "sandbox" / "models" / "tts" / "supertonic-3"
+DEFAULT_AUDIO_FALLBACK_DURATION = 4.0
 _init_lock = threading.Lock()
+
 
 
 class TTSProvider:

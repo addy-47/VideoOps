@@ -4,11 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "videoops"
-version = "0.2.0"
+version = "0.2.3"
 description = "AI-powered YouTube Shorts automation pipeline with Supertonic ONNX TTS Engine"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "click>=8.1.0",
+    "sherpa-onnx>=1.13.4",
+    "edge-tts>=7.2.8",
+    "faster-whisper>=1.2.1",
+    "soundfile>=0.14.0",
     "openai>=1.0.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
@@ -16,15 +21,18 @@ dependencies = [
     "Pillow>=10.4.0",
     "numpy>=2.2.3",
     "requests>=2.32.4",
+    "httpx>=0.27.0",
     "python-dotenv>=1.0.1",
     "google-api-python-client>=2.160.0",
     "google-auth>=2.38.0",
     "google-auth-oauthlib>=1.2.1",
     "onnxruntime>=1.18.0",
-    "soundfile>=0.12.1",
     "scipy>=1.11.0",
     "tqdm>=4.67.1",
-    "psutil>=5.9.0"
+    "psutil>=5.9.0",
+    "gTTS>=2.5.4",
+    "pyyaml>=6.0.0",
+    "yake>=0.7.0"
 ]
 
 [project.optional-dependencies]
@@ -33,5 +41,12 @@ dev = [
     "ruff>=0.3.0"
 ]
 
+[project.scripts]
+vops = "videoops.cli.cli:main"
+videoops = "videoops.cli.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"videoops.cli" = ["templates/*.tpl"]

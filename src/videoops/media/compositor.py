@@ -70,10 +70,11 @@ class VideoCompositor:
             v_clip = v_clip.with_start(0.0)
             all_child_clips.append(v_clip)
 
-            # 2. Build animated word-by-word highlighted caption overlays for this segment
+            # 2. Build animated word-by-word highlighted caption overlays for this segment if enabled
             card_text = seg.text or (timeline.title if i == 0 else "")
-            words = card_text.split()
+            words = card_text.split() if settings.captions_enabled else []
             word_overlay_clips = []
+
 
             if words:
                 word_dur = seg.duration / len(words)

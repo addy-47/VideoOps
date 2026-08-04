@@ -38,6 +38,50 @@ class Settings(BaseSettings):
     OUTPUT_DIR: str = "sandbox/outputs"
     TEMP_DIR: str = "sandbox/temp"
 
+    _user_config: dict | None = None
+
+    def get_user_config(self) -> dict:
+        """Lazy load and parse config.yaml from project root or working directory."""
+        if self._user_config is not None:
+            return self._user_config
+
+        import yaml
+        config_file = Path.cwd() / "config.yaml"
+        if not config_file.exists():
+            config_file = self.project_root / "config.yaml"
+
+        if config_file.exists():
+            try:
+                with open(config_file, "r", encoding="utf-8") as f:
+                    self._user_config = yaml.safe_load(f) or {}
+                    return self._user_config
+            except Exception:
+                pass
+
+        self._user_config = {}
+        return self._user_config
+
+    @property
+    def script_config(self) -> dict:
+        """Script generation configuration dictionary."""
+        cfg = self.get_user_config().get("script", {})
+        return {
+            "default_topic": cfg.get("default_topic", self.YOUTUBE_TOPIC),
+            "target_duration_seconds": cfg.get("target_duration_seconds", 30),
+            "cards_count": cfg.get("cards_count", 5),
+            "tone": cfg.get("tone", "fast_paced_breakdown"),
+            "target_audience": cfg.get("target_audience", "software_engineers"),
+            "hook_style": cfg.get("hook_style", "bold_question"),
+            "cta_style": cfg.get("cta_style", "subscribe_for_more"),
+            "language": cfg.get("language", "English"),
+        }
+
+    @property
+    def captions_enabled(self) -> bool:
+        """Check if caption overlays are enabled."""
+        cfg = self.get_user_config().get("captions", {})
+        return cfg.get("enabled", True)
+
     @property
     def api_key(self) -> str:
         """Resolve LLM API key, prioritizing NVIDIA_API_KEY then LLM_API_KEY."""
@@ -70,3 +114,4 @@ class Settings(BaseSettings):
 
 # Singleton configuration instance
 settings = Settings()
+
