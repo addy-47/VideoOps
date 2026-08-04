@@ -30,4 +30,5 @@ cron.log
 server.txt
 archive/
 sandbox/
+analysis/
 src/videoops.egg-info

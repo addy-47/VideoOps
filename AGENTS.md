@@ -8,6 +8,7 @@
 |-----------|--------------------|
 | Any Python/backend code | `.agents/rules/py-backend-engieer.md` |
 | Any LLM/prompt/agent work | `.agents/rules/senior-ai-engineer.md` |
+| Any HTML/CSS/JS canvas or frontend design | `.agents/rules/frontend-engineer.md` |
 | Any output validation / pipeline sign-off | `.agents/rules/visual-qa-engineer.md` |
 
 For every change or run, the visual-qa gate applies: **assume every output is broken until frames are verified**.
@@ -16,7 +17,7 @@ For every change or run, the visual-qa gate applies: **assume every output is br
 
 ## What This Repo Is
 
-AI YouTube Shorts pipeline (`v0.2.0`). LLM writes the script → media assets fetched/synthesized → MoviePy+FFmpeg assembles a 1080×1920 vertical short → optional YouTube upload. Code that runs is only half the job; the **rendered video is the product**. If the frames are bad, the code is wrong, no matter how clean it looks.
+AI YouTube Shorts pipeline (`v0.2.3` $\rightarrow$ `v1.0` Architecture Phase). LLM writes the script $\rightarrow$ Code-to-Canvas HTML/CSS/JS + GSAP scenes rendered via Playwright $\rightarrow$ MoviePy+FFmpeg assembles 1080×1920 vertical short with TTS, SFX, and BGM $\rightarrow$ optional YouTube upload. Code that runs is only half the job; the **rendered video is the product**. If the frames are bad, the code is wrong, no matter how clean it looks.
 
 ## Layout
 
@@ -29,17 +30,21 @@ src/videoops/
 ├── media/         # MoviePy/FFmpeg compositing, text overlays, frame extraction
 ├── publishing/    # YouTube OAuth upload
 └── pipeline/      # ShortsPipelineOrchestrator — wires everything
-docs/              # ALL specs & documentation live here
+analysis/          # 20 downloaded benchmark Shorts + STT transcripts & storyboards
+templates/         # Ground-truth 1:1 benchmark Short codebases (4-5 full Shorts)
+docs/
+└── specs/         # System specifications (vision-spec.md, architecture-spec.md)
 sandbox/           # ALL runtime output: outputs/ (final video) + temp/ (scratch) 
 archive/           # holds the legacy `automation/` + `helper/`
-
-## Commands
-
-```sh
-python main.py              # auto (video/image alternates by day-of-year)
-python main.py video         # force video pipeline
-python main.py image         # force image pipeline
 ```
+
+## Quality Mandate & Anti-Slop Enforcement
+
+- **Quality is the first priority — no ceiling.** Every pipeline change is judged by the final rendered video, not by the code alone. If the output is merely "produced", it is not done.
+- **Mandatory `DESIGN.md` Requirement**: Every template codebase must contain a `DESIGN.md` defining its mode, color palette tokens, typography pairs, and signature motion elements before any canvas code is written.
+- **Zero AI Slop Directives**: No static screenshot fallbacks, no generic flexbox cards with plain fade/slide tweens, and no simplifying visual/animation complexity because it is difficult.
+- **Skill Consultation Gate**: Before writing canvas code, active deep-dives into frontend design skills (`impeccable`, `frontend-design`, `web-animation-design`, `gsap-core`, `gsap-timeline`) are strictly required.
+- **Critique the frames brutally.** After any run, inspect sampled frames and audio. Apply `visual-qa-engineer` and `frontend-engineer` rules before calling anything done.
 
 ## Operational Pitfalls — Before touching anything
 
@@ -48,12 +53,6 @@ python main.py image         # force image pipeline
 - **Never run the long pipeline twice to "see".** One run = real spend + server time. Verify inputs once, run once.
 - **Sandbox discipline.** Everything generated writes under `sandbox/` (`outputs/` and `temp/`). It is gitignored — never commit sandbox contents.
 - **Never write output outside `sandbox/` and never commit** `.env` (live API keys) or `server.txt` (credentials). Both are gitignored; keep it that way.
-
-## Quality Mandate
-
-- **Quality is the first priority — no ceiling.** Every pipeline change is judged by the final rendered video, not by the code alone. If the output is merely "produced", it is not done.
-- **Critique the frames brutally.** After any run, inspect sampled frames (the orchestrator extracts QA frames under `sandbox/temp/frame_samples_*/`) and the audio. Check: caption/text renders correctly, no overlap, transitions intentional, narration matches visuals, no black frames, pacing natural.
-- **Do not approve** an output you only *assume* looks right. Apply the `visual-qa-engineer` rules before calling anything done.
 
 ## Config & Env
 
@@ -71,23 +70,17 @@ python main.py image         # force image pipeline
 
 ---
 
-## Current Status (v0.2.1 Refactor - Completed Work)
+## Current Status (v0.2.3 & VideoOps 1.0 Vision/Specs Phase)
 
-- **Offline Supertonic-3 ONNX TTS Integration**:
-  - Uninstalled legacy cloud speech packages (`azure-cognitiveservices-speech`, `google-cloud-texttospeech`, `gTTS`).
-  - Integrated offline thread-safe `SupertonicTTSProvider` in [src/videoops/assets/audio.py](file:///home/addy/projects/apps/videoops/src/videoops/assets/audio.py) using Supertonic-3 ONNX models.
-- **Glassmorphism Pill Subtitle Overlay Engine**:
-  - Redesigned frosted dark glass pill capsule badge (`rgba(0, 0, 0, 180)`), rounded capsule ends, crisp 1px border (`outline=(255, 255, 255, 120)`), centered dead in the middle of the 1080×1920 canvas (`y = 960`).
-  - Built single-pass word rendering using Pillow's official `draw.textlength` with exact prefix text length centering for sub-pixel accuracy and zero text doubling/smearing.
-  - Active word highlighted in bright gold yellow (`#FFEB14`) with high-contrast white base text (`#FFFFFF`).
-  - Punctuation stripping handles leading/trailing hyphens while preserving internal contraction apostrophes (e.g. `"Switch 2's"`).
-- **Google Fonts & Typography System**:
-  - Replaced broken 14-byte stub fonts with genuine Google Fonts TTF binaries in [src/videoops/assets/fonts/](file:///home/addy/projects/apps/videoops/src/videoops/assets/fonts/): `Montserrat-ExtraBold.ttf` (318 KB) and `Outfit-Bold.ttf` (318 KB).
-- **MoviePy 2.2 Background Motion Fix**:
-  - Fixed background clip transformation ordering in [src/videoops/media/compositor.py](file:///home/addy/projects/apps/videoops/src/videoops/media/compositor.py) by moving `all_child_clips.append(v_clip)` *after* applying 1.35x Ken Burns slow-zoom motion (`v_clip.resized(lambda t: 1.0 + 0.35 * (t / duration))`).
-- **Stock Video Query Specificity**:
-  - Updated [src/videoops/assets/visual.py](file:///home/addy/projects/apps/videoops/src/videoops/assets/visual.py) query sanitization to query `"nintendo switch"` for Nintendo topics, eliminating generic/irrelevant stock video matches.
-- **Visual QA Signoff**:
-  - Verified by Visual QA Engineer subagent (`visual-qa-inspector`) with a **10/10 rating** and **PASSED verdict**.
-
-
+- **Benchmark Shorts Extraction & Analysis**:
+  - Downloaded 10 KodeKloud and 10 InsiderForce top Shorts into `analysis/`.
+  - Processed 3-second frame extraction for all 20 videos into dedicated subdirectories.
+  - Generated timestamped STT transcripts (`transcript.txt` / `transcript.json`) using `faster-whisper`.
+  - Generated production-grade storyboards (`storyboard.md`) using `gemma4:e4b` (128K context window via remote Ollama at `http://100.86.62.14:11434`).
+- **VideoOps 1.0 Specifications (Code-to-Canvas Architecture)**:
+  - Created [docs/specs/vision-spec.md](file:///home/addy/projects/apps/videoops/docs/specs/vision-spec.md): Product vision, Code-to-Canvas paradigm, and quality requirements.
+  - Created [docs/specs/architecture-spec.md](file:///home/addy/projects/apps/videoops/docs/specs/architecture-spec.md): Multi-Agent topology (Producer, Creative Director, Visual Lead + CLI subagent delegation, Media Lead, QA Lead).
+- **Frontend Engineer Role & Skills**:
+  - Registered [.agents/rules/frontend-engineer.md](file:///home/addy/projects/apps/videoops/.agents/rules/frontend-engineer.md) referencing `gsap-core`, `gsap-timeline`, `frontend-design`, `web-animation-design`, and `impeccable`.
+- **Ground-Truth Benchmark Templates Directory**:
+  - Initialized [templates/](file:///home/addy/projects/apps/videoops/templates/README.md) directory to house 4–5 complete, 1:1 ground-truth code reproductions of selected benchmark Shorts prior to multi-agent pipeline development.

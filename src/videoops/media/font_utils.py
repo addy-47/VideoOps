@@ -17,19 +17,19 @@ class FontManager:
     @classmethod
     def get_font(
         cls,
-        font_size: int = 48,
-        font_name: str = "Montserrat-Bold.ttf",
+        font_size: int = 56,
+        font_name: str = "Poppins-Black.ttf",
     ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         """Load TTF font with fallback chain (Custom Local TTF -> System TTF -> PIL Default)."""
         cache_key = (font_name, font_size)
         if cache_key in cls._cached_fonts:
             return cls._cached_fonts[cache_key]
 
-        # 1. Local font directory check
+        # 1. Local font directory check (Prioritize top-tier production marketing TTFs)
         candidate_paths = [
             FONTS_DIR / font_name,
-            FONTS_DIR / "Montserrat-Bold.ttf",
-            FONTS_DIR / "Inter-Bold.ttf",
+            FONTS_DIR / "Poppins-Black.ttf",
+            FONTS_DIR / "BebasNeue-Regular.ttf",
             FONTS_DIR / "Anton-Regular.ttf",
         ]
 

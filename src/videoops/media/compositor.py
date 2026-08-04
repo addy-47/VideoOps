@@ -38,7 +38,7 @@ class VideoCompositor:
             if seg.asset_path.endswith((".mp4", ".mov", ".webm", ".avi", ".mkv")):
                 v_clip = VideoFileClip(seg.asset_path)
                 if v_clip.duration < clip_dur:
-                    v_clip = v_clip.looped(duration=clip_dur)
+                    v_clip = v_clip.with_effects([vfx.Loop(duration=clip_dur)])
                 else:
                     v_clip = v_clip.subclipped(0, clip_dur)
             else:

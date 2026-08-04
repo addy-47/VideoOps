@@ -1,12 +1,10 @@
-"""Supertonic-3 ONNX Runtime TTS provider for local offline high-quality speech synthesis."""
+"""Offline Supertonic-3 TTS (via sherpa-onnx) & Edge Neural TTS audio asset provider."""
 
 import hashlib
 import logging
 import subprocess
+import threading
 from pathlib import Path
-import numpy as np
-import onnxruntime as ort
-import soundfile as sf
 
 from videoops.config import settings
 from videoops.domain.models import AssetType, MediaAsset
@@ -14,136 +12,143 @@ from videoops.domain.models import AssetType, MediaAsset
 logger = logging.getLogger(__name__)
 
 SUPERTONIC_MODEL_DIR = Path(__file__).resolve().parent.parent.parent.parent / "sandbox" / "models" / "tts" / "supertonic-3"
-
-
-import threading
-
 _init_lock = threading.Lock()
 
+
 class TTSProvider:
-    """Local Supertonic-3 ONNX Runtime speech synthesizer with FFmpeg speech acceleration."""
+    """TTS asset provider supporting sherpa-onnx Supertonic-3, Edge TTS, and fallback chains."""
 
-    _te_session: ort.InferenceSession | None = None
-    _dp_session: ort.InferenceSession | None = None
-    _ve_session: ort.InferenceSession | None = None
-    _vc_session: ort.InferenceSession | None = None
+    _sherpa_tts = None
 
-    def __init__(self, output_dir: Path | None = None) -> None:
+    def __init__(self, output_dir: Path | None = None, mode: str = "edge") -> None:
         self.output_dir = output_dir or settings.resolved_temp_dir
+        self.mode = mode
         self.model_dir = SUPERTONIC_MODEL_DIR
         if not self.model_dir.exists():
-            # Fallback to system .vox model path
             self.model_dir = Path.home() / ".vox" / "models" / "tts" / "supertonic-3"
 
     @classmethod
-    def _init_sessions(cls, model_dir: Path) -> None:
-        """Initialize ONNX Runtime inference sessions lazily with thread safety."""
+    def _init_sherpa_onnx(cls, model_dir: Path):
+        """Initialize sherpa-onnx Supertonic-3 OfflineTts engine with thread safety."""
         with _init_lock:
-            if cls._te_session is None:
-                opts = ort.SessionOptions()
-                opts.intra_op_num_threads = 2
-                opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            if cls._sherpa_tts is None:
+                import sherpa_onnx
 
-                logger.info(f"Initializing Supertonic-3 ONNX TTS models from '{model_dir}'...")
-                cls._te_session = ort.InferenceSession(str(model_dir / "text_encoder.int8.onnx"), opts)
-                cls._dp_session = ort.InferenceSession(str(model_dir / "duration_predictor.int8.onnx"), opts)
-                cls._ve_session = ort.InferenceSession(str(model_dir / "vector_estimator.int8.onnx"), opts)
-                cls._vc_session = ort.InferenceSession(str(model_dir / "vocoder.int8.onnx"), opts)
+                logger.info(f"Initializing sherpa-onnx Supertonic-3 engine from '{model_dir}'...")
+                config = sherpa_onnx.OfflineTtsConfig(
+                    model=sherpa_onnx.OfflineTtsModelConfig(
+                        supertonic=sherpa_onnx.OfflineTtsSupertonicModelConfig(
+                            text_encoder=str(model_dir / "text_encoder.int8.onnx"),
+                            duration_predictor=str(model_dir / "duration_predictor.int8.onnx"),
+                            vector_estimator=str(model_dir / "vector_estimator.int8.onnx"),
+                            vocoder=str(model_dir / "vocoder.int8.onnx"),
+                            tts_json=str(model_dir / "tts.json"),
+                            unicode_indexer=str(model_dir / "unicode_indexer.bin"),
+                            voice_style=str(model_dir / "voice.bin"),
+                        )
+                    )
+                )
+                cls._sherpa_tts = sherpa_onnx.OfflineTts(config)
 
     def synthesize(self, text: str, filename_prefix: str = "tts_") -> MediaAsset:
-        """Synthesize text into speech WAV/MP3 file using Supertonic-3 ONNX Runtime."""
+        """Synthesize text into speech MP3/WAV file with automated provider fallback."""
         text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()[:8]
-        raw_wav_name = f"{filename_prefix}_{text_hash}_raw.wav"
         final_mp3_name = f"{filename_prefix}_{text_hash}.mp3"
-
-        raw_wav_path = self.output_dir / raw_wav_name
         final_mp3_path = self.output_dir / final_mp3_name
 
         if final_mp3_path.exists() and final_mp3_path.stat().st_size > 1024:
-            logger.info(f"Using cached Supertonic TTS speech file: '{final_mp3_path.name}'")
+            logger.info(f"Using cached TTS speech file: '{final_mp3_path.name}'")
             duration = self._get_audio_duration(final_mp3_path)
             return MediaAsset(path=str(final_mp3_path), asset_type=AssetType.AUDIO, duration=duration)
 
-        self._init_sessions(self.model_dir)
+        # Mode Selection: "edge" vs "supertonic"
+        if self.mode == "supertonic":
+            asset = self._synthesize_sherpa_supertonic(text, filename_prefix, text_hash)
+            if asset:
+                return asset
+            logger.warning("Supertonic TTS failed. Falling back to Edge TTS...")
 
-        # 1. Text tokenization (unicode mapping)
-        chars = [ord(c) for c in text]
-        text_ids = np.array([chars], dtype=np.int64)
-        text_len = len(chars)
-        text_mask = np.ones((1, 1, text_len), dtype=np.float32)
+        # Edge Neural TTS Primary
+        asset = self._synthesize_edge_tts(text, final_mp3_path)
+        if asset:
+            return asset
 
-        # Zero style latents
-        style_ttl = np.zeros((1, 50, 256), dtype=np.float32)
-        style_dp = np.zeros((1, 8, 16), dtype=np.float32)
+        # Fallback to sherpa-onnx Supertonic if edge-tts failed
+        asset = self._synthesize_sherpa_supertonic(text, filename_prefix, text_hash)
+        if asset:
+            return asset
 
-        # 2. Text Encoder & Duration Predictor
-        text_emb = self._te_session.run(None, {"text_ids": text_ids, "style_ttl": style_ttl, "text_mask": text_mask})[0]
-        dur = self._dp_session.run(None, {"text_ids": text_ids, "style_dp": style_dp, "text_mask": text_mask})[0]
+        # Final gTTS Fallback
+        return self._synthesize_gtts(text, final_mp3_path)
 
-        latent_len = int(np.round(float(dur.flatten()[0]))) if dur.size > 0 else int(text_len * 1.5)
-        latent_len = max(12, latent_len)
+    def _synthesize_edge_tts(self, text: str, output_path: Path) -> MediaAsset | None:
+        """Synthesize via Edge Neural AI Voice."""
+        try:
+            import asyncio
+            import edge_tts
 
-        # 3. Vector Estimator Flow Matching (5 steps)
-        latent = np.random.randn(1, 144, latent_len).astype(np.float32)
-        latent_mask = np.ones((1, 1, latent_len), dtype=np.float32)
-        steps = 5
+            voice = "en-US-ChristopherNeural"
+            logger.info(f"Synthesizing Neural TTS audio with Edge TTS ({voice}) for: '{text[:30]}...'")
 
-        for step in range(steps):
-            c_step = np.array([step], dtype=np.float32)
-            t_step = np.array([steps], dtype=np.float32)
-            vel = self._ve_session.run(
-                None,
-                {
-                    "noisy_latent": latent,
-                    "text_emb": text_emb,
-                    "style_ttl": style_ttl,
-                    "latent_mask": latent_mask,
-                    "text_mask": text_mask,
-                    "current_step": c_step,
-                    "total_step": t_step,
-                },
-            )[0]
-            latent = latent + (1.0 / steps) * vel
+            async def _synth():
+                communicate = edge_tts.Communicate(text, voice)
+                await communicate.save(str(output_path))
 
-        # 4. Vocoder waveform synthesis (44.1kHz)
-        audio = self._vc_session.run(None, {"latent": latent})[0].squeeze()
-        sf.write(str(raw_wav_path), audio, 44100)
+            asyncio.run(_synth())
 
-        # 5. Apply 1.18x speech rate speedup via FFmpeg
-        final_path = self._speedup_audio(raw_wav_path, final_mp3_path, speed_factor=1.18)
-        duration = self._get_audio_duration(final_path)
+            if output_path.exists() and output_path.stat().st_size > 1024:
+                duration = self._get_audio_duration(output_path)
+                logger.info(f"Successfully synthesized Edge TTS audio ({duration:.2f}s) -> '{output_path.name}'")
+                return MediaAsset(path=str(output_path), asset_type=AssetType.AUDIO, duration=duration)
+        except Exception as e:
+            logger.warning(f"Edge TTS synthesis failed: {e}")
+        return None
 
-        # Cleanup raw unaccelerated WAV file
-        if raw_wav_path.exists():
-            try:
-                raw_wav_path.unlink()
-            except Exception:
-                pass
+    def _synthesize_sherpa_supertonic(self, text: str, prefix: str, text_hash: str) -> MediaAsset | None:
+        """Synthesize via sherpa-onnx native Supertonic-3 engine."""
+        try:
+            import soundfile as sf
 
-        logger.info(f"Synthesized Supertonic-3 ONNX speech audio ({duration:.2f}s) -> '{final_path.name}'")
-        return MediaAsset(path=str(final_path), asset_type=AssetType.AUDIO, duration=duration)
+            self._init_sherpa_onnx(self.model_dir)
+            logger.info(f"Synthesizing speech via sherpa-onnx Supertonic-3 for: '{text[:30]}...'")
 
-    def _speedup_audio(self, input_path: Path, output_path: Path, speed_factor: float = 1.18) -> Path:
-        """Accelerate speech pacing using FFmpeg atempo filter without changing pitch."""
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(input_path),
-            "-filter:a",
-            f"atempo={speed_factor}",
-            "-vn",
-            "-acodec",
-            "libmp3lame",
-            "-q:a",
-            "2",
-            str(output_path),
-        ]
+            audio = self._sherpa_tts.generate(text, sid=0, speed=1.0)
+            raw_wav_path = self.output_dir / f"{prefix}_{text_hash}_sherpa.wav"
+            final_mp3_path = self.output_dir / f"{prefix}_{text_hash}.mp3"
+
+            sf.write(str(raw_wav_path), audio.samples, audio.sample_rate)
+            final_path = self._convert_wav_to_mp3(raw_wav_path, final_mp3_path)
+            duration = self._get_audio_duration(final_path)
+
+            if raw_wav_path.exists():
+                try:
+                    raw_wav_path.unlink()
+                except Exception:
+                    pass
+
+            logger.info(f"Successfully synthesized sherpa-onnx Supertonic-3 audio ({duration:.2f}s) -> '{final_path.name}'")
+            return MediaAsset(path=str(final_path), asset_type=AssetType.AUDIO, duration=duration)
+        except Exception as e:
+            logger.warning(f"sherpa-onnx Supertonic-3 synthesis failed: {e}")
+        return None
+
+    def _synthesize_gtts(self, text: str, output_path: Path) -> MediaAsset:
+        """Fallback synthesis using gTTS."""
+        from gtts import gTTS
+
+        logger.info("Synthesizing fallback speech with gTTS...")
+        tts = gTTS(text=text, lang="en", slow=False)
+        tts.save(str(output_path))
+        duration = self._get_audio_duration(output_path)
+        return MediaAsset(path=str(output_path), asset_type=AssetType.AUDIO, duration=duration)
+
+    def _convert_wav_to_mp3(self, input_path: Path, output_path: Path) -> Path:
+        """Convert WAV audio to MP3 format via FFmpeg."""
+        cmd = ["ffmpeg", "-y", "-i", str(input_path), "-vn", "-acodec", "libmp3lame", "-q:a", "2", str(output_path)]
         try:
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return output_path
-        except Exception as e:
-            logger.warning(f"Audio speedup failed: {e}. Using raw WAV file.")
+        except Exception:
             return input_path
 
     def _get_audio_duration(self, file_path: Path) -> float:
